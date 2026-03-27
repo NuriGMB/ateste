@@ -353,34 +353,61 @@ function filtrar() {
 function mudarTab(btn) { document.querySelectorAll('.tab').forEach(t=>t.classList.remove('ativo')); btn.classList.add('ativo'); tabAtual = btn.dataset.tab; filtrar(); }
 function limpar() { document.getElementById('selCurso').value = ''; document.getElementById('selCidade').value = ''; document.getElementById('busca').value = ''; document.getElementById('selMostrar').value = ''; document.querySelectorAll('.tab').forEach(t=>t.classList.remove('ativo')); document.querySelector('[data-tab="todos"]').classList.add('ativo'); tabAtual = 'todos'; filtrar(); }
 
-// ── FUNÇÃO NATIVA E MODERNA (FETCH) ──────────────────────────────────
+// ── FUNÇÃO NATIVA E MODERNA (FETCH) COM VERIFICADOR DE ERRO AVANÇADO ────────────────
+function replaceErrors(key, value) {
+  if (value instanceof Error) {
+      return Object.getOwnPropertyNames(value).reduce(function(error, key) {
+          error[key] = value[key];
+          return error;
+      }, {});
+  }
+  return value;
+}
+
+function errorHandler(error) {
+  console.log(JSON.stringify({error: error}, replaceErrors));
+
+  if (error.properties && error.properties.errors instanceof Array) {
+      const errorMessages = error.properties.errors.map(function (error) {
+          return error.properties.explanation;
+      }).join("\n\n");
+      
+      alert(`⚠️ ENCONTRAMOS O PROBLEMA NO ARQUIVO WORD:\n\n${errorMessages}\n\nDICA: Abra o modelo_ateste.docx no Google Docs, apague essa variável que deu erro e digite ela novamente.`);
+  } else {
+      alert(`Ops! Erro ao processar o arquivo.\n\nDetalhe: ${error.message}`);
+  }
+  throw error;
+}
+
 async function gerarAtesteDOCX(btn, index) {
   const d = RESULTADO_ATUAL[index];
   
-  // Feedback visual no botão
   const textoOriginal = btn.innerHTML;
   btn.innerHTML = '⏳ Gerando...';
   btn.disabled = true;
 
   try {
-      // 1. Baixa o arquivo do GitHub
-      const resposta = await fetch('./modelo_ateste.docx');
+      // Baixa o modelo_ateste.docx do GitHub com parâmetro aleatório para burlar o cache temporariamente
+      const resposta = await fetch('./modelo_ateste.docx?v=' + new Date().getTime());
       
       if (!resposta.ok) {
-          throw new Error(`Arquivo não encontrado (Erro ${resposta.status})`);
+          throw new Error(`Arquivo modelo_ateste.docx não encontrado no servidor.`);
       }
 
-      // 2. Converte para o formato binário que a biblioteca entende
       const dadosBinarios = await resposta.arrayBuffer();
-
-      // 3. Prepara o ZIP e o DocxTemplater usando o window.PizZip
       const zip = new window.PizZip(dadosBinarios);
-      const doc = new window.docxtemplater(zip, {
-          paragraphLoop: true,
-          linebreaks: true,
-      });
+      
+      let doc;
+      try {
+          doc = new window.docxtemplater(zip, {
+              paragraphLoop: true,
+              linebreaks: true,
+          });
+      } catch (error) {
+          errorHandler(error);
+      }
 
-      // 4. Injeta as informações
+      // Preenche os dados
       doc.render({
           empresa: d.concedente || "",
           localest: d.local || "",
@@ -390,21 +417,21 @@ async function gerarAtesteDOCX(btn, index) {
           endemp: d.endereco || d.cidade || ""
       });
 
-      // 5. Gera o arquivo final
       const out = doc.getZip().generate({
           type: "blob",
           mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       });
 
-      // 6. Faz o Download
       const nomeArquivo = `Ateste_${(d.local || "Empresa").replace(/[^a-zA-Z0-9]/g, '_')}.docx`;
       saveAs(out, nomeArquivo);
 
   } catch (erro) {
-      console.error(erro);
-      alert(`Ops! Algo deu errado ao tentar gerar o ateste.\n\nDetalhe do erro: ${erro.message}`);
+      // Evita mostrar alerta duplo se o erro já foi pego no errorHandler
+      if(!erro.properties){ 
+          console.error(erro);
+          alert(`Erro na geração: ${erro.message}`);
+      }
   } finally {
-      // Retorna o botão ao normal
       btn.innerHTML = textoOriginal;
       btn.disabled = false;
   }
@@ -413,5 +440,7 @@ async function gerarAtesteDOCX(btn, index) {
 // Iniciar
 carregarDados();
 </script>
+</body>
+</html>
 </body>
 </html>
