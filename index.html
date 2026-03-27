@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Locais de Estágio — IF Baiano GMB</title>
 
+<script src="https://unpkg.com/pizzip@3.1.4/dist/pizzip.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/docxtemplater/3.37.11/docxtemplater.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pizzip/3.1.4/pizzip.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 
 <style>
@@ -373,8 +373,8 @@ async function gerarAtesteDOCX(btn, index) {
       // 2. Converte para o formato binário que a biblioteca entende
       const dadosBinarios = await resposta.arrayBuffer();
 
-      // 3. Prepara o ZIP e o DocxTemplater
-      const zip = new PizZip(dadosBinarios);
+      // 3. Prepara o ZIP e o DocxTemplater usando o window.PizZip
+      const zip = new window.PizZip(dadosBinarios);
       const doc = new window.docxtemplater(zip, {
           paragraphLoop: true,
           linebreaks: true,
