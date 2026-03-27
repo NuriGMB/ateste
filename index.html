@@ -241,8 +241,18 @@ async function carregarDados() {
 
     const empresas = {};
     t1.forEach(row => {
-      const nome = row['Nome/Razão social'] || row['Nome/RazÃ£o social'] || row['nome/razão social'] || Object.values(row)[2] || '';
-      if (nome.trim()) { empresas[nome.trim()] = row; empresas[nome.trim().toLowerCase()] = row; }
+      let nome = '';
+      for (let key in row) {
+        if (key.toLowerCase().includes('razão') || key.toLowerCase().includes('razao') || key.toLowerCase().includes('nome')) {
+          nome = row[key];
+          break;
+        }
+      }
+      if (!nome) nome = Object.values(row)[2] || '';
+      
+      if (nome.trim()) { 
+         empresas[nome.trim().toLowerCase()] = row; 
+      }
     });
 
     const visto = new Map();
@@ -258,22 +268,53 @@ async function carregarDados() {
 
       if (!concedente && !local && !curso) return; 
 
-      const emp = empresas[concedente] || empresas[concedente.toLowerCase()] || {};
-      const cidade   = (emp['Cidade'] || '').trim();
-      const email    = (emp['Email'] || '').trim();
-      const telefone = (emp['Telefone'] || '').trim();
-      const cnpj     = (emp['CNPJ'] || emp['cnpj'] || emp['C.N.P.J.'] || '').trim();
-      const endereco = (emp['Endereço'] || emp['Endereço completo'] || emp['Endereco'] || cidade).trim();
+      const nomeConcLimpo = concedente.toLowerCase();
+      let emp = empresas[nomeConcLimpo];
+      if (!emp) {
+         for (let key in empresas) {
+            if (key.includes(nomeConcLimpo) || nomeConcLimpo.includes(key)) {
+               emp = empresas[key];
+               break;
+            }
+         }
+      }
+      emp = emp || {};
 
-      const key = `${concedente.toLowerCase()}|${local.toLowerCase()}|${curso.toLowerCase()}|${cidade.toLowerCase()}`;
-      if (visto.has(key)) {
-        const prev = visto.get(key);
+      let cnpj = '', endereco = '', telefone = '', email = '', cidadeEmp = '';
+      
+      for (let key in emp) {
+        const k = key.toLowerCase();
+        // AGORA BUSCANDO PELA COLUNA EXATA DE IDENTIFICAÇÃO CADASTRAL
+        if (k.includes('identificação cadastral') || k.includes('identificacao cadastral') || k.includes('cnpj')) cnpj = emp[key];
+        else if (k.includes('endereço') || k.includes('endereco')) endereco = emp[key];
+        else if (k.includes('telefone') || k.includes('fone')) telefone = emp[key];
+        else if (k.includes('email') || k.includes('e-mail')) email = emp[key];
+        else if (k.includes('cidade')) cidadeEmp = emp[key];
+      }
+
+      const cidade = cidadeEmp.trim();
+
+      const keyMap = `${concedente.toLowerCase()}|${local.toLowerCase()}|${curso.toLowerCase()}|${cidade.toLowerCase()}`;
+      if (visto.has(keyMap)) {
+        const prev = visto.get(keyMap);
         if (RANK[status] < RANK[prev.status]) { prev.status = status; prev.fim = fim; }
         return;
       }
 
-      const obj = { concedente, local, curso, cidade, endereco, cnpj, email, telefone, fim, status };
-      visto.set(key, obj); processados.push(obj);
+      const obj = { 
+        concedente, 
+        local, 
+        curso, 
+        cidade, 
+        endereco: endereco.trim() || cidade, 
+        cnpj: cnpj.trim(), 
+        email: email.trim(), 
+        telefone: telefone.trim(), 
+        fim, 
+        status 
+      };
+      
+      visto.set(keyMap, obj); processados.push(obj);
     });
 
     DADOS = processados; popularFiltros(); desabilitarFiltros(false); filtrar();
@@ -353,7 +394,6 @@ function filtrar() {
 function mudarTab(btn) { document.querySelectorAll('.tab').forEach(t=>t.classList.remove('ativo')); btn.classList.add('ativo'); tabAtual = btn.dataset.tab; filtrar(); }
 function limpar() { document.getElementById('selCurso').value = ''; document.getElementById('selCidade').value = ''; document.getElementById('busca').value = ''; document.getElementById('selMostrar').value = ''; document.querySelectorAll('.tab').forEach(t=>t.classList.remove('ativo')); document.querySelector('[data-tab="todos"]').classList.add('ativo'); tabAtual = 'todos'; filtrar(); }
 
-// ── FUNÇÃO NATIVA E MODERNA (FETCH) COM VERIFICADOR DE ERRO AVANÇADO ────────────────
 function replaceErrors(key, value) {
   if (value instanceof Error) {
       return Object.getOwnPropertyNames(value).reduce(function(error, key) {
@@ -387,7 +427,6 @@ async function gerarAtesteDOCX(btn, index) {
   btn.disabled = true;
 
   try {
-      // Baixa o modelo_ateste.docx do GitHub com parâmetro aleatório para burlar o cache temporariamente
       const resposta = await fetch('./modelo_ateste.docx?v=' + new Date().getTime());
       
       if (!resposta.ok) {
@@ -402,6 +441,7 @@ async function gerarAtesteDOCX(btn, index) {
           doc = new window.docxtemplater(zip, {
               paragraphLoop: true,
               linebreaks: true,
+              delimiters: {start: '{', end: '}'}
           });
       } catch (error) {
           errorHandler(error);
@@ -409,12 +449,12 @@ async function gerarAtesteDOCX(btn, index) {
 
       // Preenche os dados
       doc.render({
-          empresa: d.concedente || "",
-          localest: d.local || "",
-          telemp: d.telefone || "",
-          emailemp: d.email || "",
-          cnpj: d.cnpj || "",
-          endemp: d.endereco || d.cidade || ""
+          empresa: d.concedente || "_________________",
+          localest: d.local || "_________________",
+          telemp: d.telefone || "________",
+          emailemp: d.email || "________",
+          cnpj: d.cnpj || "_________________",
+          endemp: d.endereco || d.cidade || "_________________"
       });
 
       const out = doc.getZip().generate({
@@ -426,7 +466,6 @@ async function gerarAtesteDOCX(btn, index) {
       saveAs(out, nomeArquivo);
 
   } catch (erro) {
-      // Evita mostrar alerta duplo se o erro já foi pego no errorHandler
       if(!erro.properties){ 
           console.error(erro);
           alert(`Erro na geração: ${erro.message}`);
