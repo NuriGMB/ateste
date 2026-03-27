@@ -35,6 +35,7 @@
 
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   thead th { text-align: left; padding: 10px 14px; background: #f8fafc; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; }
+  tbody tr:hover { background: #f8fafc; }
   td { padding: 10px 14px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
 
   .local-nome { font-weight: 600; color: #0f172a; }
@@ -107,7 +108,7 @@
 </div>
 
 <script>
-// MANTENDO EXATAMENTE SUA LÓGICA DE URLS E PROCESSAMENTO
+// --- CONFIGURAÇÃO E DADOS ---
 const URL_T1 = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTLGLd6VicHaXxND5GBNkr1lTA-2Lrw-iU79BA3KPQI4TBDQGTTFAgBX0cwfLUICQq3lSUDdURitobb/pub?gid=1034620908&single=true&output=csv';
 const URL_T2 = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTLGLd6VicHaXxND5GBNkr1lTA-2Lrw-iU79BA3KPQI4TBDQGTTFAgBX0cwfLUICQq3lSUDdURitobb/pub?gid=0&single=true&output=csv';
 
@@ -115,26 +116,39 @@ const LABEL = {valido:'✅ Válido', proximo:'⚠️ A vencer', expirado:'❌ Ex
 const RANK  = {valido:0, proximo:1, expirado:2, sem_data:3};
 
 let DADOS = [];
-let RESULTADO_FILTRADO = []; // Para o PDF
+let RESULTADO_FILTRADO = []; 
 let tabAtual = 'todos';
 
+// --- UTILITÁRIOS ---
 function fixEncoding(str) { try { return decodeURIComponent(escape(str)); } catch(e) { return str; } }
+
+function splitCSVLine(line) {
+  const result = []; let cur = ''; let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') inQ = !inQ; 
+    else if (c === ',' && !inQ) { result.push(cur); cur = ''; } 
+    else cur += c;
+  }
+  result.push(cur); return result;
+}
 
 function parseCSV(text) {
   const lines = text.trim().split('\n');
-  const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+  const headers = splitCSVLine(lines[0]).map(h => fixEncoding(h.trim().replace(/^"|"$/g,'')));
   return lines.slice(1).map(line => {
-    const vals = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.replace(/"/g, '').trim());
+    const vals = splitCSVLine(line).map(v => fixEncoding(v.trim().replace(/^"|"$/g,'')));
     const obj = {};
-    headers.forEach((h, i) => obj[h] = fixEncoding(vals[i] || ''));
+    headers.forEach((h, i) => obj[h] = vals[i] || '');
     return obj;
   });
 }
 
 function parseDate(dateStr) {
-  if (!dateStr) return null;
-  const p = dateStr.split('/');
-  return p.length === 3 ? new Date(p[2], p[1]-1, p[0]) : null;
+  if (!dateStr || dateStr.trim() === '') return null;
+  const parts = dateStr.trim().split('/');
+  if (parts.length === 3) return new Date(parts[2], parts[1]-1, parts[0]);
+  return null;
 }
 
 function calcStatus(dateStr) {
@@ -147,8 +161,9 @@ function calcStatus(dateStr) {
   return 'valido';
 }
 
+// --- CARREGAMENTO ---
 async function carregarDados() {
-  document.getElementById('estadoContainer').innerHTML = '<div class="loading"><div class="spinner"></div>Carregando...</div>';
+  document.getElementById('estadoContainer').innerHTML = '<div class="loading"><div class="spinner"></div>Carregando dados...</div>';
   try {
     const [r1, r2] = await Promise.all([fetch(URL_T1+'&t='+Date.now()), fetch(URL_T2+'&t='+Date.now())]);
     const t1 = parseCSV(await r1.text());
@@ -156,13 +171,14 @@ async function carregarDados() {
 
     const empresas = {};
     t1.forEach(row => {
-      const nome = (row['Nome/Razão social'] || '').trim().toLowerCase();
+      const nome = (row['Nome/Razão social'] || row['Nome/RazÃ£o social'] || '').trim().toLowerCase();
       if(nome) empresas[nome] = row;
     });
 
     DADOS = t2.map(row => {
-      const conc = (row['Nome/Razão social'] || '').trim();
+      const conc = (row['Nome/Razão social'] || row['Nome/RazÃ£o social'] || '').trim();
       const emp = empresas[conc.toLowerCase()] || {};
+      const fim = row['vigencia - fim'] || '';
       return {
         concedente: conc,
         local: (row['local para estagio'] || conc).trim(),
@@ -171,15 +187,16 @@ async function carregarDados() {
         cnpj: (emp['CNPJ'] || emp['cnpj'] || '').trim(),
         email: (emp['Email'] || '').trim(),
         telefone: (emp['Telefone'] || '').trim(),
-        fim: row['vigencia - fim'] || '',
-        status: calcStatus(row['vigencia - fim'])
+        fim: fim,
+        status: calcStatus(fim)
       };
     }).filter(d => d.concedente);
 
     popularFiltros();
     habilitar(true);
     filtrar();
-  } catch (e) { document.getElementById('estadoContainer').innerHTML = 'Erro ao carregar.'; }
+    document.getElementById('ultimaAtualizacao').textContent = `Atualizado às ${new Date().toLocaleTimeString('pt-BR')}`;
+  } catch (e) { document.getElementById('estadoContainer').innerHTML = 'Erro ao carregar planilha.'; }
 }
 
 function popularFiltros() {
@@ -200,7 +217,7 @@ function filtrar() {
     if (mostrar && d.status !== mostrar) return false;
     if (curso && d.curso !== curso) return false;
     if (cidade && d.cidade !== cidade) return false;
-    if (busca && !d.local.toLowerCase().includes(busca)) return false;
+    if (busca && !d.local.toLowerCase().includes(busca) && !d.concedente.toLowerCase().includes(busca)) return false;
     return true;
   });
 
@@ -210,57 +227,71 @@ function filtrar() {
     <tr>
       <td><div class="local-nome">${d.local}</div><div class="concedente">${d.concedente}</div></td>
       <td>${d.curso}</td>
-      <td>${d.cidade}</td>
+      <td>${d.cidade || '—'}</td>
       <td><span class="badge badge-${d.status}">${d.fim || '—'}</span></td>
-      <td><button class="btn-ateste" onclick="gerarAteste(${i})">📄 Gerar Ateste</button></td>
+      <td><button class="btn-ateste" onclick="gerarAteste(${i})">📄 Ateste</button></td>
     </tr>
   `).join('');
+  document.getElementById('resultInfo').innerHTML = `<strong>${RESULTADO_FILTRADO.length}</strong> locais encontrados.`;
 }
 
-// FUNÇÃO DO PDF — REPRODUZINDO O MODELO ENVIADO
+// --- GERAÇÃO DO PDF (MODELO OFICIAL) ---
 function gerarAteste(idx) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
   const d = RESULTADO_FILTRADO[idx];
 
+  // Cabeçalho institucional (Recriando fielmente o seu modelo)
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.text("INSTITUTO FEDERAL BAIANO", 105, 15, { align: "center" });
+  doc.setFontSize(11);
+  doc.text("INSTITUTO FEDERAL", 20, 15);
+  doc.setFont("helvetica", "normal");
+  doc.text("Baiano", 20, 20);
+
+  doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
-  doc.text("ATESTADO DE CAMPO DE ESTÁGIO", 105, 25, { align: "center" });
+  doc.text("ATESTE DE CAMPO DE ESTÁGIO", 105, 30, { align: "center" });
 
+  // Instituição de Ensino
   doc.setFontSize(9);
-  doc.text("INSTITUIÇÃO DE ENSINO", 20, 35);
-  doc.setFont("helvetica", "normal");
-  doc.text("Nome: INSTITUTO FEDERAL DE EDUCAÇÃO, CIÊNCIA E TECNOLOGIA BAIANO - IFBAIANO", 20, 42);
-  doc.text("Fone: (75) 3638-2012   Email: gabinete@gm.ifbaiano.edu.br", 20, 47);
-  doc.text("CNPJ: 10.724.903/0011-40", 20, 52);
-  doc.text("Endereço: Rua Waldemar Mascarenhas, s/n, Portão, Governador Mangabeira - BA, CEP: 44350-000", 20, 57);
-
-  doc.setFontSize(9);
-  const texto = "Declaro que avaliei as instalações da CONCEDENTE DE ESTÁGIO abaixo identificada, razão pela qual, e de acordo com os seguintes parâmetros, atesto sua adequação como campo de estágio curricular obrigatório adequado à formação cultural e profissional dos Alunos Estagiários do IFBAIANO:";
-  doc.text(doc.splitTextToSize(texto, 170), 20, 68);
-
   doc.setFont("helvetica", "bold");
-  doc.text("CONCEDENTE DE ESTÁGIO", 20, 85);
+  doc.text("INSTITUIÇÃO DE ENSINO", 20, 40);
+  
   doc.setFont("helvetica", "normal");
-  doc.text(`Nome: ${d.concedente}`, 20, 92);
-  doc.text(`Local do Estágio: ${d.local}`, 20, 99);
-  doc.text(`Fone: ${d.telefone || "__________"}   Email: ${d.email || "__________"}`, 20, 106);
-  doc.text(`CNPJ: ${d.cnpj || "____________________"}`, 20, 113);
-  doc.text(`Curso: ____________________________________________________`, 20, 120);
+  doc.text("Nome: INSTITUTO FEDERAL DE EDUCAÇÃO, CIÊNCIA E TECNOLOGIA BAIANO - IFBAIANO", 20, 46);
+  doc.text("Fone: (75) 3638-2012   Email: gabinete@gm.ifbaiano.edu.br", 20, 51);
+  doc.text("CNPJ: 10.724.903/0011-40", 20, 56);
+  doc.text("Endereço: Rua Waldemar Mascarenhas, s/n, Portão, Governador Mangabeira - BA", 20, 61);
 
+  // Declaração
+  const texto = "Declaro que avaliei as instalações da CONCEDENTE DE ESTÁGIO abaixo identificada, razão pela qual, atesto sua adequação como campo de estágio curricular obrigatório adequado à formação cultural e profissional dos Alunos Estagiários do IFBAIANO:";
+  doc.text(doc.splitTextToSize(texto, 170), 20, 72);
+
+  // Dados da Concedente
   doc.setFont("helvetica", "bold");
-  doc.text("Justificativa Técnica:", 20, 130);
-  doc.rect(20, 133, 170, 40);
+  doc.text("CONCEDENTE DE ESTÁGIO", 20, 88);
+  doc.setFont("helvetica", "normal");
+  doc.text(`Nome: ${d.concedente}`, 20, 95);
+  doc.text(`Local do Estágio: ${d.local}`, 20, 102);
+  doc.text(`Fone: ${d.telefone || "__________"}   Email: ${d.email || "__________"}`, 20, 109);
+  doc.text(`CNPJ: ${d.cnpj || "____________________"}`, 20, 116);
+  doc.text(`Curso: ____________________________________________________`, 20, 123);
 
-  doc.text("Amplitude do Ateste: ______________  Quantidade de estagiários: ____", 20, 185);
+  // Quadro Justificativa
+  doc.setFont("helvetica", "bold");
+  doc.text("Justificativa Técnica:", 20, 133);
+  doc.rect(20, 136, 170, 35);
+
+  // Rodapé e Assinaturas
+  doc.text("Amplitude do Ateste: ______________  Qtde estagiários: ____", 20, 185);
   doc.text("Data da emissão: ____/____/________   Validade: ____/____/________", 20, 195);
+  
+  doc.line(20, 225, 90, 225);
+  doc.text("Responsável pelo Ateste", 35, 230);
+  doc.text("SIAPE/Formação: ___________________", 20, 235);
 
-  doc.line(20, 230, 90, 230);
-  doc.text("Responsável pelo Ateste", 35, 235);
-  doc.line(120, 230, 190, 230);
-  doc.text("Aval do NURI", 145, 235);
+  doc.line(120, 225, 190, 225);
+  doc.text("Aval do NURI", 145, 230);
 
   doc.save(`Ateste_${d.local}.pdf`);
 }
