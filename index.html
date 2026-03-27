@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Locais de Estágio — IF Baiano GMB</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: #f1f5f9; color: #1e293b; min-height: 100vh; }
+
+  header { background: #166534; color: white; padding: 18px 24px; display: flex; align-items: center; gap: 12px; }
+  header h1 { font-size: 17px; font-weight: 600; }
+  header p { font-size: 12px; opacity: .7; margin-top: 1px; }
+  .header-right { margin-left: auto; font-size: 11px; opacity: .6; text-align: right; }
+
+  .top-bar { background: #fff; border-bottom: 1px solid #e2e8f0; padding: 14px 24px; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+  .top-bar label { font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .4px; display: block; margin-bottom: 4px; }
+  select, input[type=text] { font-family: 'Inter', sans-serif; font-size: 13px; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 7px; padding: 8px 11px; color: #1e293b; outline: none; transition: border-color .15s; width: 100%; }
+  select:focus, input:focus { border-color: #16a34a; background: #fff; }
+  
+  .fg { display: flex; flex-direction: column; }
+  .fg-curso { width: 280px; } .fg-cidade { width: 200px; } .fg-busca { width: 220px; } .fg-status { width: 170px; }
+  
+  .btn-limpar { font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 500; padding: 8px 14px; border-radius: 7px; border: 1.5px solid #e2e8f0; background: none; cursor: pointer; color: #64748b; align-self: flex-end; transition: all .15s; }
+  .btn-limpar:hover { border-color: #16a34a; color: #15803d; background: #f0fdf4; }
+  .btn-reload { font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 500; padding: 8px 14px; border-radius: 7px; border: 1.5px solid #bbf7d0; background: #f0fdf4; cursor: pointer; color: #15803d; align-self: flex-end; transition: all .15s; }
+
+  .tabs { padding: 12px 24px 0; display: flex; gap: 4px; flex-wrap: wrap; }
+  .tab { font-size: 12px; font-weight: 500; padding: 6px 14px; border-radius: 6px 6px 0 0; border: 1.5px solid transparent; background: none; cursor: pointer; color: #64748b; transition: all .15s; }
+  .tab.ativo { background: #fff; border-color: #e2e8f0; border-bottom-color: #fff; color: #166534; font-weight: 600; }
+
+  .conteudo { background: #fff; border: 1.5px solid #e2e8f0; border-radius: 0 8px 8px 8px; margin: 0 24px 24px; overflow: hidden; }
+  .resultado-info { padding: 10px 16px; font-size: 12px; color: #64748b; border-bottom: 1px solid #f1f5f9; background: #f8fafc; display: flex; align-items: center; justify-content: space-between; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { text-align: left; padding: 10px 14px; background: #f8fafc; font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; }
+  tbody tr:hover { background: #f8fafc; }
+  td { padding: 10px 14px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+
+  .local-nome { font-weight: 600; color: #0f172a; }
+  .concedente { font-size: 11px; color: #64748b; margin-top: 2px; }
+
+  .badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 20px; text-transform: uppercase; }
+  .badge-valido   { background: #dcfce7; color: #15803d; }
+  .badge-proximo  { background: #fef3c7; color: #b45309; }
+  .badge-expirado { background: #fee2e2; color: #b91c1c; }
+  .badge-sem_data { background: #f1f5f9; color: #64748b; }
+
+  /* Botão de Ateste Estilizado */
+  .btn-ateste { background: #166534; color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 5px; transition: background 0.2s; }
+  .btn-ateste:hover { background: #15803d; }
+
+  .loading { padding: 48px; text-align: center; color: #64748b; }
+  .spinner { width: 36px; height: 36px; border: 3px solid #e2e8f0; border-top-color: #16a34a; border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 14px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<header>
+  <div>🌱</div>
+  <div>
+    <h1>Locais de Estágio</h1>
+    <p>IF Baiano — Campus Governador Mangabeira</p>
+  </div>
+  <div class="header-right" id="ultimaAtualizacao"></div>
+</header>
+
+<div class="top-bar">
+  <div class="fg fg-curso"><label>Curso</label><select id="selCurso" onchange="filtrar()" disabled><option value="">Carregando...</option></select></div>
+  <div class="fg fg-cidade"><label>Cidade</label><select id="selCidade" onchange="filtrar()" disabled><option value="">Carregando...</option></select></div>
+  <div class="fg fg-busca"><label>Buscar</label><input type="text" id="busca" placeholder="Nome do local..." oninput="filtrar()" disabled></div>
+  <div class="fg fg-status">
+    <label>Mostrar</label>
+    <select id="selMostrar" onchange="filtrar()" disabled>
+      <option value="">Todos os status</option>
+      <option value="valido">✅ Somente válidos</option>
+      <option value="proximo">⚠️ Próximos do venc.</option>
+      <option value="expirado">❌ Somente expirados</option>
+    </select>
+  </div>
+  <button class="btn-limpar" onclick="limpar()">✕ Limpar</button>
+  <button class="btn-reload" onclick="carregarDados()">↻ Atualizar</button>
+</div>
+
+<div class="tabs" id="tabs">
+  <button class="tab ativo" data-tab="todos" onclick="mudarTab(this)">Todos</button>
+  <button class="tab" data-tab="valido" onclick="mudarTab(this)">✅ Válidos</button>
+  <button class="tab" data-tab="proximo" onclick="mudarTab(this)">⚠️ A vencer</button>
+  <button class="tab" data-tab="expirado" onclick="mudarTab(this)">❌ Expirados</button>
+</div>
+
+<div class="conteudo">
+  <div class="resultado-info" id="resultInfo"></div>
+  <div id="estadoContainer"></div>
+  <table id="tabela" style="display:none">
+    <thead>
+      <tr>
+        <th>Local / Empresa</th>
+        <th>Curso</th>
+        <th>Cidade</th>
+        <th>Validade</th>
+        <th>Ações</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<script>
+const URL_T1 = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTLGLd6VicHaXxND5GBNkr1lTA-2Lrw-iU79BA3KPQI4TBDQGTTFAgBX0cwfLUICQq3lSUDdURitobb/pub?gid=1034620908&single=true&output=csv';
+const URL_T2 = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTLGLd6VicHaXxND5GBNkr1lTA-2Lrw-iU79BA3KPQI4TBDQGTTFAgBX0cwfLUICQq3lSUDdURitobb/pub?gid=0&single=true&output=csv';
+
+const LABEL = {valido:'✅ Válido', proximo:'⚠️ A vencer', expirado:'❌ Expirado', sem_data:'— Sem data'};
+const RANK  = {valido:0, proximo:1, expirado:2, sem_data:3};
+
+let DADOS = [];
+let RESULTADO_FILTRADO = []; // Para gerenciar o PDF corretamente
+let tabAtual = 'todos';
+
+// Funções de Processamento Originais (CSV, Datas, etc.)
+function fixEncoding(str) { try { return decodeURIComponent(escape(str)); } catch(e) { return str; } }
+
+function parseCSV(text) {
+  const lines = text.trim().split('\n');
+  const rawHeaders = splitCSVLine(lines[0]).map(h => fixEncoding(h.trim().replace(/^"|"$/g,'')));
+  const headers = [];
+  const seen = new Set();
+  rawHeaders.forEach(h => { if (!seen.has(h)) { headers.push(h); seen.add(h); } else { headers.push(h + '__dup'); } });
+  return lines.slice(1).map(line => {
+    const vals = splitCSVLine(line).map(v => fixEncoding(v.trim().replace(/^"|"$/g,'')));
+    const obj = {};
+    headers.forEach((h, i) => { if (!h.endsWith('__dup')) obj[h] = vals[i] || ''; });
+    return obj;
+  }).filter(r => Object.values(r).some(v => v));
+}
+
+function splitCSVLine(line) {
+  const result = []; let cur = ''; let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { inQ = !inQ; } else if (c === ',' && !inQ) { result.push(cur); cur = ''; } else { cur += c; }
+  }
+  result.push(cur); return result;
+}
+
+function parseDate(dateStr) {
+  if (!dateStr || dateStr.trim() === '') return null;
+  const parts = dateStr.trim().split(/[\/\-]/);
+  if (parts.length === 3) {
+    if (parts[0].length === 4) return new Date(parts[0], parts[1]-1, parts[2]);
+    const d = parts[2].length === 4 ? new Date(parts[2], parts[1]-1, parts[0]) : null;
+    return isNaN(d) ? null : d;
+  }
+  return null;
+}
+
+function calcStatus(dateStr) {
+  const d = parseDate(dateStr);
+  if (!d) return 'sem_data';
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const diff = Math.floor((d - hoje) / 86400000);
+  if (diff < 0) return 'expirado';
+  if (diff <= 90) return 'proximo';
+  return 'valido';
+}
+
+function formatDate(dateStr) {
+  const d = parseDate(dateStr);
+  return d ? d.toLocaleDateString('pt-BR') : '';
+}
+
+async function carregarDados() {
+  document.getElementById('estadoContainer').innerHTML = '<div class="loading"><div class="spinner"></div>Buscando dados...</div>';
+  try {
+    const [r1, r2] = await Promise.all([fetch(URL_T1+'&t='+Date.now()), fetch(URL_T2+'&t='+Date.now())]);
+    const [csv1, csv2] = await Promise.all([r1.text(), r2.text()]);
+    const t1 = parseCSV(csv1);
+    const t2 = parseCSV(csv2);
+
+    const empresas = {};
+    t1.forEach(row => {
+      const nome = row['Nome/Razão social'] || row['Nome/RazÃ£o social'] || '';
+      if (nome) {
+        empresas[nome.trim().toLowerCase()] = row;
+      }
+    });
+
+    const visto = new Map();
+    const processados = [];
+
+    t2.forEach(row => {
+      const concedente = (row['Nome/Razão social'] || row['Nome/RazÃ£o social'] || '').trim();
+      const local = (row['local para estagio'] || '').trim();
+      const curso = (row['Curso'] || '').trim();
+      if (!concedente && !local) return;
+
+      const emp = empresas[concedente.toLowerCase()] || {};
+      const status = calcStatus(row['vigencia - fim']);
+      
+      const key = `${concedente.toLowerCase()}|${local.toLowerCase()}|${curso.toLowerCase()}`;
+      if (visto.has(key)) return;
+
+      const obj = {
+        concedente, local, curso,
+        cidade: (emp['Cidade'] || '').trim(),
+        cnpj: (emp['CNPJ'] || '').trim(),
+        email: (emp['Email'] || '').trim(),
+        telefone: (emp['Telefone'] || '').trim(),
+        fim: formatDate(row['vigencia - fim']),
+        status
+      };
+      visto.set(key, obj);
+      processados.push(obj);
+    });
+
+    DADOS = processados;
+    popularFiltros();
+    habilitar(true);
+    filtrar();
+    document.getElementById('ultimaAtualizacao').textContent = `Atualizado às ${new Date().toLocaleTimeString('pt-BR')}`;
+  } catch (err) {
+    document.getElementById('estadoContainer').innerHTML = '<div class="erro">Erro ao carregar dados.</div>';
+  }
+}
+
+function popularFiltros() {
+  const cursos = [...new Set(DADOS.map(d=>d.curso).filter(Boolean))].sort();
+  const cidades = [...new Set(DADOS.map(d=>d.cidade).filter(Boolean))].sort();
+  document.getElementById('selCurso').innerHTML = '<option value="">Todos os cursos</option>' + cursos.map(c=>`<option value="${c}">${c}</option>`).join('');
+  document.getElementById('selCidade').innerHTML = '<option value="">Todas as cidades</option>' + cidades.map(c=>`<option value="${c}">${c}</option>`).join('');
+}
+
+function filtrar() {
+  const curso = document.getElementById('selCurso').value.toLowerCase();
+  const cidade = document.getElementById('selCidade').value.toLowerCase();
+  const busca = document.getElementById('busca').value.toLowerCase().trim();
+  const mostrar = document.getElementById('selMostrar').value;
+
+  RESULTADO_FILTRADO = DADOS.filter(d => {
+    if (tabAtual !== 'todos' && d.status !== tabAtual) return false;
+    if (mostrar && d.status !== mostrar) return false;
+    if (curso && d.curso.toLowerCase() !== curso) return false;
+    if (cidade && d.cidade.toLowerCase() !== cidade) return false;
+    if (busca && !(d.local+d.concedente).toLowerCase().includes(busca)) return false;
+    return true;
+  });
+
+  RESULTADO_FILTRADO.sort((a,b) => RANK[a.status]-RANK[b.status] || a.local.localeCompare(b.local));
+
+  const tbody = document.getElementById('tbody');
+  const tabela = document.getElementById('tabela');
+  const ec = document.getElementById('estadoContainer');
+
+  if (RESULTADO_FILTRADO.length === 0) {
+    tabela.style.display = 'none';
+    ec.innerHTML = '<div class="loading">Nenhum resultado encontrado.</div>';
+    ec.style.display = 'block';
+  } else {
+    ec.style.display = 'none';
+    tabela.style.display = 'table';
+    tbody.innerHTML = RESULTADO_FILTRADO.map((d, i) => `
+      <tr>
+        <td>
+          <div class="local-nome">${d.local}</div>
+          <div class="concedente">${d.concedente}</div>
+        </td>
+        <td>${d.curso}</td>
+        <td>${d.cidade || '—'}</td>
+        <td><span class="badge badge-${d.status}">${LABEL[d.status]}<br><small>${d.fim}</small></span></td>
+        <td>
+          <button class="btn-ateste" onclick="gerarAteste(${i})">
+            📄 Ateste
+          </button>
+        </td>
+      </tr>
+    `).join('');
+  }
+  document.getElementById('resultInfo').innerHTML = `<strong>${RESULTADO_FILTRADO.length}</strong> locais encontrados.`;
+}
+
+// FUNÇÃO DO PDF - BASEADA NO SEU MODELO
+function gerarAteste(idx) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const d = RESULTADO_FILTRADO[idx];
+
+  // Configuração de Fonte
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.text("INSTITUTO FEDERAL BAIANO", 105, 15, { align: "center" });
+  doc.setFontSize(12);
+  doc.text("ATESTADO DE CAMPO DE ESTÁGIO", 105, 25, { align: "center" });
+
+  // Seção Instituição (Fixo) [cite: 4, 6]
+  doc.setFontSize(9);
+  doc.text("INSTITUIÇÃO DE ENSINO:", 20, 40);
+  doc.setFont("helvetica", "normal");
+  doc.text("Nome: INSTITUTO FEDERAL DE EDUCAÇÃO, CIÊNCIA E TECNOLOGIA BAIANO - IFBAIANO", 20, 45);
+  doc.text("Fone: (75) 3638-2012   Email: gabinete@gm.ifbaiano.edu.br", 20, 50);
+  doc.text("CNPJ: 10.724.903/0011-40", 20, 55);
+  doc.text("Endereço: Rua Waldemar Mascarenhas, s/n, Portão, Governador Mangabeira - BA", 20, 60);
+
+  // Seção Concedente (Automático da Planilha) [cite: 9, 10, 11, 15, 16]
+  doc.setFont("helvetica", "bold");
+  doc.text("CONCEDENTE DE ESTÁGIO:", 20, 75);
+  doc.setFont("helvetica", "normal");
+  doc.text(`Nome: ${d.concedente}`, 20, 80);
+  doc.text(`Local do Estágio: ${d.local}`, 20, 85);
+  doc.text(`CNPJ: ${d.cnpj || "____________________"}`, 20, 90);
+  doc.text(`Endereço: ${d.cidade ? 'Cidade de ' + d.cidade : "____________________"}`, 20, 95);
+  doc.text(`Fone: ${d.telefone || "__________"}   Email: ${d.email || "__________"}`, 20, 100);
+
+  // Espaços para Preenchimento [cite: 12, 13, 17, 18, 19, 21]
+  doc.setFont("helvetica", "bold");
+  doc.text("CURSO: ____________________________________________________", 20, 115);
+  
+  doc.text("JUSTIFICATIVA TÉCNICA:", 20, 130);
+  doc.rect(20, 135, 170, 45); // Caixa de texto da justificativa
+
+  doc.text("Amplitude do Ateste: _________________  Quantidade de estagiários: ____", 20, 195);
+  doc.text("Data da emissão: ____/____/________    Validade: ____/____/________", 20, 205);
+
+  // Rodapé de Assinaturas [cite: 22, 23, 25, 27]
+  doc.line(20, 240, 90, 240);
+  doc.text("Responsável pelo Ateste", 33, 245);
+  doc.setFontSize(7);
+  doc.text("(Nome/SIAPE/Assinatura)", 38, 248);
+
+  doc.setFontSize(9);
+  doc.line(120, 240, 190, 240);
+  doc.text("Aval do NURI", 145, 245);
+
+  // Nome do arquivo salvo
+  const nomeArquivo = `Ateste_${d.local.replace(/[^a-z0-9]/gi, '_')}.pdf`;
+  doc.save(nomeArquivo);
+}
+
+function mudarTab(btn) {
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('ativo'));
+  btn.classList.add('ativo'); tabAtual = btn.dataset.tab; filtrar();
+}
+function limpar() { 
+  document.getElementById('selCurso').value = ''; 
+  document.getElementById('selCidade').value = ''; 
+  document.getElementById('busca').value = ''; 
+  document.getElementById('selMostrar').value = '';
+  filtrar(); 
+}
+function habilitar(s) { ['selCurso','selCidade','busca','selMostrar'].forEach(id=>document.getElementById(id).disabled=!s); }
+
+carregarDados();
+</script>
+</body>
+</html>
