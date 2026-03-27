@@ -7,7 +7,6 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/docxtemplater/3.37.11/docxtemplater.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pizzip/3.1.4/pizzip.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pizzip/3.1.4/pizzip-utils.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
 
 <style>
@@ -46,7 +45,7 @@
   tbody tr { border-bottom: 1px solid #f1f5f9; transition: background .1s; }
   tbody tr:hover { background: #f8fafc; }
   tbody tr:last-child { border-bottom: none; }
-  td { padding: 10px 14px; vertical-align: top; }
+  td { padding: 10px 14px; vertical-align: middle; }
 
   .local-nome { font-weight: 600; color: #0f172a; }
   .concedente { font-size: 11px; color: #64748b; margin-top: 2px; }
@@ -75,9 +74,17 @@
   .ultima-atualizacao { font-size: 11px; color: #94a3b8; }
 
   /* Estilo do botão de Gerar Ateste */
-  .btn-gerar-docx { background-color: #166534; color: white; border: none; padding: 6px 12px; border-radius: 5px; font-size: 11px; font-weight: 600; cursor: pointer; transition: background 0.2s; white-space: nowrap; }
+  .btn-gerar-docx { background-color: #166534; color: white; border: none; padding: 8px 12px; border-radius: 5px; font-size: 12px; font-family: 'Inter', sans-serif; font-weight: 600; cursor: pointer; transition: background 0.2s; white-space: nowrap; display: flex; align-items: center; gap: 5px; }
   .btn-gerar-docx:hover { background-color: #15803d; }
+  .btn-gerar-docx:active { transform: scale(0.97); }
 
+  @media (max-width: 640px) {
+    .fg-curso, .fg-cidade, .fg-busca, .fg-status { width: 100%; }
+    .tabs { padding: 10px 12px 0; }
+    .conteudo { margin: 0 12px 20px; }
+    .top-bar { padding: 12px; }
+    table { display: block; overflow-x: auto; }
+  }
 </style>
 </head>
 <body>
@@ -255,8 +262,7 @@ async function carregarDados() {
       const cidade   = (emp['Cidade'] || '').trim();
       const email    = (emp['Email'] || '').trim();
       const telefone = (emp['Telefone'] || '').trim();
-      
-      const cnpj = (emp['CNPJ'] || emp['cnpj'] || emp['C.N.P.J.'] || '').trim();
+      const cnpj     = (emp['CNPJ'] || emp['cnpj'] || emp['C.N.P.J.'] || '').trim();
       const endereco = (emp['Endereço'] || emp['Endereço completo'] || emp['Endereco'] || cidade).trim();
 
       const key = `${concedente.toLowerCase()}|${local.toLowerCase()}|${curso.toLowerCase()}|${cidade.toLowerCase()}`;
@@ -338,7 +344,7 @@ function filtrar() {
         <td><span class="fim-date ${d.status}">${d.fim || '—'}</span></td>
         <td><span class="badge badge-${d.status}">${LABEL[d.status]}</span></td>
         <td class="contato">${contato || '<span style="color:#94a3b8">—</span>'}</td>
-        <td><button class="btn-gerar-docx" onclick="gerarAtesteDOCX(${index})">📄 Emitir</button></td>
+        <td><button class="btn-gerar-docx" onclick="gerarAtesteDOCX(this, ${index})">📄 Emitir</button></td>
       </tr>`;
     }).join('');
   }
@@ -347,48 +353,61 @@ function filtrar() {
 function mudarTab(btn) { document.querySelectorAll('.tab').forEach(t=>t.classList.remove('ativo')); btn.classList.add('ativo'); tabAtual = btn.dataset.tab; filtrar(); }
 function limpar() { document.getElementById('selCurso').value = ''; document.getElementById('selCidade').value = ''; document.getElementById('busca').value = ''; document.getElementById('selMostrar').value = ''; document.querySelectorAll('.tab').forEach(t=>t.classList.remove('ativo')); document.querySelector('[data-tab="todos"]').classList.add('ativo'); tabAtual = 'todos'; filtrar(); }
 
-// ── FUNÇÃO DEFINITIVA: Preencher modelo .docx ──────────────────────────────────
-function gerarAtesteDOCX(index) {
+// ── FUNÇÃO NATIVA E MODERNA (FETCH) ──────────────────────────────────
+async function gerarAtesteDOCX(btn, index) {
   const d = RESULTADO_ATUAL[index];
+  
+  // Feedback visual no botão
+  const textoOriginal = btn.innerHTML;
+  btn.innerHTML = '⏳ Gerando...';
+  btn.disabled = true;
 
-  // IMPORTANTE: O arquivo "modelo_ateste.docx" deve estar na mesma pasta que este arquivo HTML
-  PizZipUtils.getBinaryContent("modelo_ateste.docx", function(error, content) {
-    if (error) {
-        alert("Erro ao gerar! Verifique se o arquivo 'modelo_ateste.docx' está salvo na mesma pasta do seu site.");
-        console.error(error);
-        return;
-    }
+  try {
+      // 1. Baixa o arquivo do GitHub
+      const resposta = await fetch('./modelo_ateste.docx');
+      
+      if (!resposta.ok) {
+          throw new Error(`Arquivo não encontrado (Erro ${resposta.status})`);
+      }
 
-    try {
-        var zip = new PizZip(content);
-        var doc = new window.docxtemplater(zip, {
-            paragraphLoop: true,
-            linebreaks: true,
-        });
+      // 2. Converte para o formato binário que a biblioteca entende
+      const dadosBinarios = await resposta.arrayBuffer();
 
-        // Preenche as variáveis presentes no documento
-        doc.render({
-            empresa: d.concedente || "",
-            localest: d.local || "",
-            telemp: d.telefone || "",
-            emailemp: d.email || "",
-            cnpj: d.cnpj || "",
-            endemp: d.endereco || d.cidade || ""
-        });
+      // 3. Prepara o ZIP e o DocxTemplater
+      const zip = new PizZip(dadosBinarios);
+      const doc = new window.docxtemplater(zip, {
+          paragraphLoop: true,
+          linebreaks: true,
+      });
 
-        var out = doc.getZip().generate({
-            type: "blob",
-            mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        });
+      // 4. Injeta as informações
+      doc.render({
+          empresa: d.concedente || "",
+          localest: d.local || "",
+          telemp: d.telefone || "",
+          emailemp: d.email || "",
+          cnpj: d.cnpj || "",
+          endemp: d.endereco || d.cidade || ""
+      });
 
-        const nomeArquivo = `Ateste_${(d.local || "Empresa").replace(/[^a-zA-Z0-9]/g, '_')}.docx`;
-        saveAs(out, nomeArquivo);
+      // 5. Gera o arquivo final
+      const out = doc.getZip().generate({
+          type: "blob",
+          mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      });
 
-    } catch (e) {
-        console.error("Erro ao preencher o modelo:", e);
-        alert("Erro ao preencher o documento. Verifique as chaves (ex: {{empresa}}) no arquivo modelo.");
-    }
-  });
+      // 6. Faz o Download
+      const nomeArquivo = `Ateste_${(d.local || "Empresa").replace(/[^a-zA-Z0-9]/g, '_')}.docx`;
+      saveAs(out, nomeArquivo);
+
+  } catch (erro) {
+      console.error(erro);
+      alert(`Ops! Algo deu errado ao tentar gerar o ateste.\n\nDetalhe do erro: ${erro.message}`);
+  } finally {
+      // Retorna o botão ao normal
+      btn.innerHTML = textoOriginal;
+      btn.disabled = false;
+  }
 }
 
 // Iniciar
